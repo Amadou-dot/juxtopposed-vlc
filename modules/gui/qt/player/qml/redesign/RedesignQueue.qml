@@ -22,7 +22,7 @@ FocusScope {
     property int sortKey: -1
     property bool sortDescending: false
     property bool random: false
-    property bool repeating: false
+    property var repeatState: ({})
     readonly property int actionIndex: selectedGroupKey.length ? -1 : selectedIndex >= 0 && selectedIndex < itemCount ? selectedIndex : currentIndex
     readonly property RedesignTheme theme: RedesignTheme { scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor }
     signal closeRequested()
@@ -134,7 +134,23 @@ FocusScope {
                 elide: Text.ElideRight; color: theme.playerLabel; font.pixelSize: theme.dp(14)
             }
             QueueToolButton { objectName: "queueSortButton"; Layout.rightMargin: theme.dp(4); iconName: "sort"; text: qsTr("Sort queue"); enabled: root.itemCount > 1 && root.sortChoices.length > 0; onClicked: sortMenu.toggleFrom(this) }
-            QueueToolButton { objectName: "queueRepeatButton"; Layout.rightMargin: theme.dp(4); iconName: "queue-repeat"; selectedIconName: "queue-repeat-active"; text: qsTr("Repeat"); selected: root.repeating; onClicked: root.repeatRequested() }
+            QueueToolButton {
+                objectName: "queueRepeatButton"
+                Layout.rightMargin: theme.dp(4)
+                iconName: "queue-repeat"; selectedIconName: "queue-repeat-active"
+                text: root.repeatState.description || qsTr("Repeat off")
+                selected: !!root.repeatState.checked
+                onClicked: root.repeatRequested()
+                Text {
+                    objectName: "queueRepeatBadge"
+                    anchors.right: parent.right; anchors.top: parent.top
+                    anchors.rightMargin: theme.dp(3); anchors.topMargin: theme.dp(2)
+                    text: root.repeatState.badge || ""
+                    visible: text.length > 0
+                    color: theme.menuAccent; font.pixelSize: theme.dp(9)
+                    Accessible.ignored: true
+                }
+            }
             QueueToolButton { objectName: "queueShuffleButton"; Layout.rightMargin: theme.dp(4); iconName: "queue-shuffle"; selectedIconName: "queue-shuffle-active"; text: qsTr("Shuffle"); selected: root.random; onClicked: root.shuffleRequested() }
             QueueToolButton { objectName: "queueRemoveButton"; iconName: "remove"; text: qsTr("Remove from queue"); enabled: root.actionIndex >= 0 && root.actionIndex < root.itemCount; onClicked: root.removeSelection() }
             QueueToolButton { objectName: "queueAddButton"; iconName: "add"; text: qsTr("Add files to queue"); onClicked: root.addRequested() }

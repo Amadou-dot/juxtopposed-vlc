@@ -566,7 +566,7 @@ FocusScope {
                 sortKey: MainPlaylistController.sortKey
                 sortDescending: MainPlaylistController.sortOrder === PlaylistController.SORT_ORDER_DESC
                 random: MainPlaylistController.random
-                repeating: MainPlaylistController.repeatMode !== PlaylistController.PLAYBACK_REPEAT_NONE
+                repeatState: view.customControlStates.repeat
                 onCloseRequested: view.queueOpen = false
                 onAddRequested: DialogsProvider.simpleOpenDialog(false)
                 onSaveRequested: DialogsProvider.savePlayingToPlaylist()
