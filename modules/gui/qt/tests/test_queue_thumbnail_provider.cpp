@@ -12,6 +12,9 @@
 #include <QQmlEngine>
 #include <QThread>
 #include <QElapsedTimer>
+#include <QQuickView>
+#include <QQuickItem>
+#include <mutex>
 #include <vlc/vlc.h>
 #include "../../../../lib/libvlc_internal.h"
 #include "../util/queue_thumbnail_provider.hpp"
@@ -36,6 +39,13 @@ QUrl media(const QString& directory, const QString& name = "video.mp4")
 QString id(const QUrl& url)
 {
     return QString::fromLatin1(QUrl::toPercentEncoding(url.toString(QUrl::FullyEncoded)));
+}
+QQuickItem* visualChild(QQuickItem* parent, const QString& name)
+{
+    if (parent->objectName() == name) return parent;
+    for (auto* child : parent->childItems())
+        if (auto* match = visualChild(child, name)) return match;
+    return nullptr;
 }
 struct Pending
 {
@@ -339,6 +349,70 @@ private slots:
         QTest::newRow("portrait") << QSize(36, 64);
     }
 
+    void visibleQueueRowsCancelAndResumeNativeRequests()
+    {
+        QTemporaryDir directory;
+        QStringList urls;
+        for (int i = 0; i < 40; ++i)
+            urls.append(media(directory.path(), QString::fromUtf8("clip # %23 日本語 %1.mp4").arg(i)).toString());
+        std::mutex recordsMutex;
+        QList<QUrl> requested;
+        std::atomic_int calls{0}, cancellations{0};
+        std::atomic_bool release{false};
+        QueueThumbnailProvider::Options options;
+        options.decode = [&](const QUrl& url, const std::atomic_bool& cancelled) {
+            { std::lock_guard lock(recordsMutex); requested.append(url); }
+            ++calls;
+            while (!release && !cancelled) QThread::msleep(1);
+            if (cancelled) ++cancellations;
+            return frame();
+        };
+        QQuickView view;
+        view.engine()->addImageProvider("queuethumbnail", new QueueThumbnailProvider(options));
+        view.rootContext()->setContextProperty("fixtureUrls", urls);
+        QQmlComponent component(view.engine());
+        component.setData("import QtQuick\nimport \".\" as Redesign\n"
+            "Redesign.RedesignQueue { width: 400; height: 300; videoPreviewsAvailable: true;"
+            "queueModel: ListModel { id: media }\nitemCount: media.count;"
+            "Component.onCompleted: { for (let i=0; i<fixtureUrls.length; ++i)"
+            "media.append({title: 'Clip '+i, isCurrent: i===0, artwork: '', url: fixtureUrls[i]}) } }",
+            QUrl::fromLocalFile(QStringLiteral(TOP_SRCDIR "/modules/gui/qt/player/qml/redesign/")));
+        auto* root = qobject_cast<QQuickItem*>(component.create());
+        QVERIFY2(root, qPrintable(component.errorString()));
+        view.setContent({}, &component, root); view.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&view));
+        QTRY_COMPARE(calls.load(), 1);
+        auto* list = root->findChild<QQuickItem*>("queueList"); QVERIFY(list);
+        QVERIFY(QMetaObject::invokeMethod(list, "positionViewAtIndex", Q_ARG(int, 20), Q_ARG(int, 0)));
+        QTRY_COMPARE(cancellations.load(), 1);
+        QTRY_COMPARE(calls.load(), 2);
+        {
+            std::lock_guard lock(recordsMutex);
+            QCOMPARE(requested[0], QUrl(urls[0]));
+            QCOMPARE(requested[1], QUrl(urls[20]));
+        }
+        root->setVisible(false);
+        QTRY_COMPARE(cancellations.load(), 2);
+        QTest::qWait(50); QCOMPARE(calls.load(), 2);
+        release = true;
+        root->setVisible(true);
+        auto* thumbnail = visualChild(root, "queueThumbnail_20"); QVERIFY(thumbnail);
+        QTRY_VERIFY(thumbnail->property("ready").toBool());
+        QTest::qWait(100);
+        {
+            std::lock_guard lock(recordsMutex);
+            for (int i = 2; i < requested.size(); ++i) {
+                const auto index = urls.indexOf(requested[i].toString());
+                QVERIFY2(index >= 20 && index <= 23, "An offscreen queue entry was decoded");
+            }
+        }
+        // Destroy the engine while a new uncached request is still decoding.
+        release = false;
+        const auto previousCalls = calls.load();
+        QVERIFY(QMetaObject::invokeMethod(list, "positionViewAtIndex", Q_ARG(int, 30), Q_ARG(int, 0)));
+        QTRY_VERIFY(calls.load() > previousCalls);
+    }
+
     void nativeDecoderFitsVideoFrames()
     {
         QFETCH(QSize, size);
@@ -349,7 +423,8 @@ private slots:
                    + " F25:1 Ip A1:1 C420jpeg\n");
         const auto pixels = size.width() * size.height();
         const auto red = QByteArray(pixels, char(81)) + QByteArray(pixels / 4, char(90)) + QByteArray(pixels / 4, char(240));
-        for (int i = 0; i < 25; ++i) { file.write("FRAME\n"); file.write(red); }
+        const auto black = QByteArray(pixels, char(16)) + QByteArray(pixels / 2, char(128));
+        for (int i = 0; i < 25; ++i) { file.write("FRAME\n"); file.write(i < 6 ? black : red); }
         file.close();
         const char* args[] = {"--ignore-config", "--no-media-library", "--no-plugins-cache", "--quiet"};
         std::unique_ptr<libvlc_instance_t, decltype(&libvlc_release)> vlc(libvlc_new(4, args), libvlc_release);
@@ -391,6 +466,15 @@ private slots:
                 QVERIFY(result.wait());
                 const auto image = result.image();
                 QVERIFY2(!image.isNull(), qPrintable(file.fileName()));
+                if (file.fileName() == "soulframe.mp4") {
+                    // The fast keyframe near 15% is a fade to black; the frame
+                    // at the requested position contains the actual scene.
+                    int brightPixels = 0;
+                    for (int y = 0; y < image.height(); ++y)
+                        for (int x = 0; x < image.width(); ++x)
+                            brightPixels += qGray(image.pixel(x, y)) > 20;
+                    QVERIFY2(brightPixels > image.width() * image.height() / 4, "Seek landed on a black keyframe");
+                }
                 qInfo().noquote() << (pass ? "disk" : "cold") << timer.elapsed() << "ms" << image.size() << file.fileName();
                 if (!pass && !outputDirectory.isEmpty())
                     QVERIFY(image.save(QDir(outputDirectory).filePath(file.completeBaseName() + ".png")));

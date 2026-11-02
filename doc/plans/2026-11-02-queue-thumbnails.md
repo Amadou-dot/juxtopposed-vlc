@@ -18,7 +18,7 @@ media library.
 ## Global constraints
 
 - Preview: 80 × 45 logical pixels; uniform row height: 64 logical pixels.
-- Decode: one worker, fast seek at 15%, timeout 15 seconds, maximum 320 × 180.
+- Decode: one worker, fast seek at 15% (35%/65% fallback for black frames), total timeout 15 seconds, maximum 320 × 180.
 - Cache: 16 MiB RAM; 64 MiB and 512 disk entries; failure suppression 60 seconds.
 - Generate only for local regular files; all filesystem work stays off the GUI thread.
 - Preserve current queue interactions and support builds without the media library.

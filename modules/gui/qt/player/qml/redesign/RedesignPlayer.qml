@@ -553,6 +553,7 @@ FocusScope {
                 scaleFactor: view.scaleFactor; lightTheme: view.lightTheme; accentColor: view.accentColor
                 onCloseRequested: view.queueOpen = false
                 queueContent: Component { RedesignQueue {
+                    videoPreviewsAvailable: typeof queueThumbnailImages !== "undefined" && queueThumbnailImages
                     singleClickActivate: !!MainCtx.redesignPlayerPreferences.singleClickActivate
                 videoBackdropContent: rootPlayer.menuBackdropContent
                 scaleFactor: view.scaleFactor; lightTheme: view.lightTheme; accentColor: view.accentColor

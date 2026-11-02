@@ -9,6 +9,11 @@ TestCase {
     width: 400; height: 600
     visible: true; when: windowShown
     property int activeBackdrops: 0
+    readonly property url artworkFixture: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAJCAIAAAC0SDtlAAAAFUlEQVR4nGP8z0AaYCJR/agG2mgAAMeRARHH28OHAAAAAElFTkSuQmCC"
+    Component {
+        id: thumbnailProbe
+        RedesignQueueThumbnail { theme: queue.theme; active: true }
+    }
     Component {
         id: backdropProbe
         Item {
@@ -94,14 +99,16 @@ TestCase {
         tryVerify(() => findChild(queue, "queueGroupToggle_0") && findChild(queue, "queueGroupToggle_0").iconName === "chevron-right")
     }
     function init() {
+        failOnWarning(/Binding loop|TypeError|ReferenceError|Detected recursive rearrange/)
         queue.videoBackdropContent = null
         queue.hierarchyModel = null; queue.selectedGroupKey = ""
         treeFixture.populate()
         queue.visible = true
+        queue.scaleFactor = 1; queue.lightTheme = false
         media.clear()
-        media.append({title: "First", isCurrent: false})
-        media.append({title: "Second", isCurrent: true})
-        media.append({title: "Third", isCurrent: false})
+        media.append({title: "First", isCurrent: false, artwork: "", url: ""})
+        media.append({title: "Second", isCurrent: true, artwork: "", url: ""})
+        media.append({title: "Third", isCurrent: false, artwork: "", url: ""})
         queue.selectedIndex = -1; queue.sortKey = -1; queue.sortDescending = false
         moveSpy.clear(); removeSpy.clear(); sortSpy.clear(); playSpy.clear(); saveSpy.clear(); clearSpy.clear()
         findChild(queue, "queueSortMenu").close()
@@ -143,7 +150,7 @@ TestCase {
         queue.hierarchyModel = treeFixture
         wait(50)
         const handle = findChild(queue, "queueMoveHandle_0")
-        mouseDrag(handle, handle.width / 2, handle.height / 2, 0, 88)
+        mouseDrag(handle, handle.width / 2, handle.height / 2, 0, handle.parent.height * 2)
         compare(moveSpy.count, 1)
         compare(Array.from(moveSpy.signalArguments[0]), [0, 3])
         compare(media.get(2).title, "First"); compare(playSpy.count, 0)
@@ -178,7 +185,7 @@ TestCase {
     }
     function test_dragReordersWithoutPlayingAndHandlesDownwardInsertion() {
         const handle = findChild(queue, "queueMoveHandle_0")
-        mouseDrag(handle, handle.width / 2, handle.height / 2, 0, 88)
+        mouseDrag(handle, handle.width / 2, handle.height / 2, 0, handle.parent.height * 2)
         compare(moveSpy.count, 1)
         compare(Array.from(moveSpy.signalArguments[0]), [0, 3])
         compare(media.get(0).title, "Second")
@@ -210,7 +217,7 @@ TestCase {
     function test_hiddenQueueCancelsRowDrag() {
         const handle = findChild(queue, "queueMoveHandle_0")
         mousePress(handle, handle.width / 2, handle.height / 2)
-        mouseMove(handle, handle.width / 2, handle.height / 2 + 88, 50)
+        mouseMove(handle, handle.width / 2, handle.height / 2 + handle.parent.height * 2, 50)
         queue.visible = false
         mouseRelease(handle)
         compare(moveSpy.count, 0)
@@ -297,5 +304,114 @@ TestCase {
         media.clear()
         verify(!findChild(queue, "queueRemoveButton").enabled)
         queue.removeSelection(); compare(removeSpy.count, 0)
+    }
+
+    function test_thumbnailArtworkAndHiddenCancellation() {
+        const thumbnail = createTemporaryObject(thumbnailProbe, testCase, {
+            artwork: artworkFixture, mediaUrl: "file:///preview.mp4", videoPreviewsAvailable: true
+        })
+        verify(thumbnail)
+        compare(thumbnail.width, 80); compare(thumbnail.height, 45)
+        tryCompare(thumbnail, "ready", true)
+        compare(findChild(thumbnail, "queueVideoImage").source.toString(), "")
+        compare(findChild(thumbnail, "queueThumbnailPlaceholder").visible, false)
+        thumbnail.active = false
+        tryCompare(thumbnail, "ready", false)
+        compare(findChild(thumbnail, "queueArtworkImage").source.toString(), "")
+        compare(findChild(thumbnail, "queueVideoImage").source.toString(), "")
+        compare(findChild(thumbnail, "queueThumbnailPlaceholder").visible, true)
+        compare(thumbnail.width, 80); compare(thumbnail.height, 45)
+    }
+
+    function test_thumbnailFallbackAndFailurePlaceholder() {
+        const thumbnail = createTemporaryObject(thumbnailProbe, testCase, {mediaUrl: "file:///clip%20%23%20%E6%97%A5.mp4"})
+        const video = findChild(thumbnail, "queueVideoImage")
+        compare(video.source.toString(), "")
+        thumbnail.videoPreviewsAvailable = true
+        compare(video.source.toString(), Qt.resolvedUrl("image://queuethumbnail/" + encodeURIComponent(thumbnail.mediaUrl.toString())).toString())
+        tryCompare(video, "status", Image.Error) // Standalone runner has no native provider.
+        compare(findChild(thumbnail, "queueThumbnailPlaceholder").visible, true)
+        thumbnail.artwork = artworkFixture
+        tryCompare(thumbnail, "ready", true)
+        compare(video.source.toString(), "")
+        thumbnail.artwork = "data:image/png;base64,broken"
+        tryCompare(findChild(thumbnail, "queueArtworkImage"), "status", Image.Error)
+        verify(video.source.toString().length > 0)
+        thumbnail.mediaUrl = "https://example.invalid/video.mp4"
+        compare(video.source.toString(), "")
+        thumbnail.mediaUrl = "screen://"
+        compare(video.source.toString(), "")
+        compare(findChild(thumbnail, "queueThumbnailPlaceholder").visible, true)
+    }
+
+    function test_thumbnailRoleChangesClearOldArtwork() {
+        media.setProperty(0, "artwork", artworkFixture.toString())
+        const thumbnail = findChild(queue, "queueThumbnail_0")
+        verify(thumbnail)
+        tryCompare(thumbnail, "ready", true)
+        media.setProperty(0, "artwork", "")
+        media.setProperty(0, "url", "file:///replacement.mp4")
+        tryCompare(thumbnail, "ready", false)
+        compare(thumbnail.mediaUrl.toString(), "file:///replacement.mp4")
+        compare(findChild(thumbnail, "queueArtworkImage").source.toString(), "")
+    }
+
+    function test_onlyVisibleRowsRequestImages() {
+        for (let index = 3; index < 40; ++index) media.append({title: "Item " + index, isCurrent: false, artwork: artworkFixture.toString()})
+        const list = findChild(queue, "queueList")
+        list.cacheBuffer = 1000 // Deliberately keep offscreen delegates alive.
+        list.forceLayout(); wait(50)
+        function checkVisible() {
+            for (let index = 0; index < list.count; ++index) {
+                const row = list.itemAtIndex(index)
+                if (!row) continue
+                const thumbnail = findChild(row, "queueThumbnail_" + index)
+                verify(thumbnail)
+                const intersects = queue.visible && row.y + row.height > list.contentY && row.y < list.contentY + list.height
+                compare(thumbnail.active, intersects, "viewport gating for row " + index)
+                if (!intersects) compare(findChild(thumbnail, "queueArtworkImage").source.toString(), "")
+            }
+        }
+        checkVisible()
+        list.positionViewAtIndex(22, ListView.Beginning); wait(50); checkVisible()
+        queue.visible = false; wait(50); checkVisible()
+        queue.visible = true; wait(50); checkVisible()
+        list.cacheBuffer = 320
+    }
+
+    function test_thumbnailRowsAtCompactWidthsAndScale_data() {
+        return [{tag: "dark", scale: 1, light: false}, {tag: "light", scale: 1, light: true},
+                {tag: "scaled", scale: 1.5, light: false}]
+    }
+    function test_thumbnailRowsAtCompactWidthsAndScale(data) {
+        queue.scaleFactor = data.scale; queue.lightTheme = data.light
+        const list = findChild(queue, "queueList")
+        list.forceLayout(); wait(50)
+        const row = list.itemAtIndex(1)
+        const thumbnail = findChild(row, "queueThumbnail_1")
+        verify(thumbnail)
+        compare(row.height, 64 * data.scale)
+        compare(thumbnail.width, 80 * data.scale); compare(thumbnail.height, 45 * data.scale)
+        const indicator = findChild(thumbnail, "queuePlayingIndicator")
+        compare(indicator.visible, true); compare(indicator.color, queue.theme.accent)
+        compare(findChild(findChild(queue, "queueThumbnail_0"), "queuePlayingIndicator").visible, false)
+        const title = findChild(row, "queueTitle_1")
+        verify(title.width > 0)
+        verify(title.mapToItem(row, title.width, 0).x <= row.width + 1)
+        compare(findChild(row, "queueDuration_1").parent, title.parent)
+        queue.hierarchyModel = treeFixture; list.forceLayout(); wait(50)
+        compare(list.itemAtIndex(0).height, 64 * data.scale)
+        compare(findChild(list.itemAtIndex(0), "queueThumbnail_-1").active, false)
+    }
+
+    function test_dragAfterScrollingUsesNewRowHeight() {
+        for (let index = 3; index < 30; ++index) media.append({title: "Item " + index, isCurrent: false})
+        const list = findChild(queue, "queueList")
+        list.positionViewAtIndex(12, ListView.Beginning); wait(50)
+        const handle = findChild(queue, "queueMoveHandle_12")
+        verify(handle)
+        mouseDrag(handle, handle.width / 2, handle.height / 2, 0, handle.parent.height * 2)
+        compare(Array.from(moveSpy.signalArguments[0]), [12, 15])
+        compare(media.get(14).title, "Item 12"); compare(playSpy.count, 0)
     }
 }

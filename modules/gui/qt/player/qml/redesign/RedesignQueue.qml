@@ -11,6 +11,7 @@ FocusScope {
     property bool lightTheme: false
     property Component videoBackdropContent
     property bool singleClickActivate: false
+    property bool videoPreviewsAvailable: false
     property var hierarchyModel: null
     property string selectedGroupKey: ""
     property var queueModel
@@ -175,7 +176,7 @@ FocusScope {
                 readonly property int depth: root.hierarchyModel ? Number(model.treeDepth) : 0
                 readonly property string groupKey: root.hierarchyModel ? String(model.treeKey) : ""
                 readonly property bool containsCurrent: root.hierarchyModel ? Boolean(model.containsCurrent) : false
-                width: list.width; height: theme.dp(44)
+                width: list.width; height: theme.dp(64)
                 spacing: theme.dp(14)
                 Item { visible: row.depth > 0; Layout.preferredWidth: theme.dp(Math.min(row.depth * 12, 96)) }
                 QueueButton {
@@ -194,8 +195,7 @@ FocusScope {
                     objectName: "queueMoveHandle_" + row.queueIndex
                     visible: row.queueIndex >= 0
                     Layout.preferredWidth: theme.dp(24)
-                    iconName: row.isCurrent ? "play" : "drag"
-                    foreground: row.isCurrent ? theme.accent : theme.foreground
+                    iconName: "drag"
                     text: qsTr("Move queue item")
                     onClicked: { root.selectedGroupKey = ""; root.selectedIndex = row.queueIndex; forceActiveFocus(Qt.MouseFocusReason) }
                     DragHandler {
@@ -221,14 +221,43 @@ FocusScope {
                 QueueButton {
                     objectName: row.queueIndex >= 0 ? "queueItem_" + row.queueIndex : "queueGroup_" + row.index
                     Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    Layout.minimumWidth: 0
+                    topPadding: theme.dp(8); bottomPadding: theme.dp(8)
                     text: row.title
                     selected: row.queueIndex >= 0 ? !root.selectedGroupKey.length && root.selectedIndex === row.queueIndex : root.selectedGroupKey === row.groupKey
                     selectedForeground: row.isCurrent ? theme.accent : theme.foreground
                     contentItem: RowLayout {
                         spacing: theme.dp(12)
                         RedesignIcon { visible: row.group; Layout.preferredWidth: theme.dp(18); Layout.preferredHeight: theme.dp(18); name: row.model.treePlaylist ? "playlist" : "folder"; color: row.containsCurrent ? theme.accent : theme.foreground }
-                        Text { Layout.fillWidth: true; text: row.title; elide: Text.ElideRight; font.pixelSize: theme.dp(14); color: row.isCurrent ? theme.accent : theme.foreground }
-                        Text { objectName: "queueDuration_" + row.queueIndex; text: root.durationText(row.model.duration); font.pixelSize: theme.dp(14); color: theme.playerLabel }
+                        RedesignQueueThumbnail {
+                            objectName: "queueThumbnail_" + row.queueIndex
+                            theme: root.theme
+                            visible: !row.group
+                            Layout.preferredWidth: theme.dp(80); Layout.preferredHeight: theme.dp(45)
+                            artwork: row.model.artwork || ""
+                            mediaUrl: row.model.url || ""
+                            playing: row.isCurrent
+                            videoPreviewsAvailable: root.videoPreviewsAvailable
+                            active: !row.group && root.visible && list.visible && row.visible
+                                && row.y + row.height > list.contentY && row.y < list.contentY + list.height
+                        }
+                        ColumnLayout {
+                            Layout.fillWidth: true; Layout.minimumWidth: 0
+                            spacing: theme.dp(4)
+                            Text {
+                                objectName: "queueTitle_" + row.queueIndex
+                                Layout.fillWidth: true; Layout.minimumWidth: 0
+                                text: row.title; elide: Text.ElideRight
+                                font.pixelSize: theme.dp(14); color: row.isCurrent ? theme.accent : theme.foreground
+                            }
+                            Text {
+                                objectName: "queueDuration_" + row.queueIndex
+                                visible: !row.group
+                                text: root.durationText(row.model.duration)
+                                font.pixelSize: theme.dp(12); color: theme.playerLabel
+                            }
+                        }
                     }
                     mediaItem: true
                     singleClickActivate: root.singleClickActivate

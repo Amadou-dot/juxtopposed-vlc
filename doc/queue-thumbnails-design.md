@@ -36,7 +36,8 @@ No directory scanning, file-stat calls, decoding, or cache maintenance runs on
 the GUI thread.
 
 Use VLC's existing thumbnail preparser rather than an external program. Seek
-quickly to approximately 15% of the file, with a 15-second timeout. Export a
+quickly to approximately 15% of the file. If that frame is nearly black, try
+35% and 65%, sharing a total 15-second timeout. Export a
 frame bounded to 320 × 180 pixels while preserving aspect ratio. This must work
 when the media-library feature is disabled.
 
