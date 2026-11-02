@@ -1,5 +1,5 @@
 project('VLC', ['c', 'cpp'],
-    version: '4.0.0-beta.5',
+    version: '4.0.0-beta.6',
     default_options: ['c_std=gnu17', 'cpp_std=c++17'],
     meson_version: '>=1.10.0')
 

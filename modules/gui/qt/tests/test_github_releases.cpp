@@ -18,7 +18,7 @@ static Version version(const char* value)
 static QJsonObject release(const QString& tag, const QString& suffix = QStringLiteral("win64.zip"))
 {
     const QString name = QStringLiteral("vlc-juxtopposed-") + tag + QLatin1Char('-') + suffix;
-    const auto base = QStringLiteral("https://github.com/dsojevic/juxtopposed-vlc/releases/");
+    const auto base = QStringLiteral("https://github.com/Amadou-dot/juxtopposed-vlc/releases/");
     return {{QStringLiteral("tag_name"), tag}, {QStringLiteral("draft"), false},
             {QStringLiteral("prerelease"), Version::parse(tag)->isPrerelease()},
             {QStringLiteral("html_url"), QString(base + QStringLiteral("tag/") + tag)},
@@ -99,6 +99,30 @@ class TestGithubReleases : public QObject
 {
     Q_OBJECT
 private slots:
+    void defaultsToForkReleases()
+    {
+        QCOMPARE(GithubReleaseService::Options{}.endpoint,
+                 QUrl(QStringLiteral("https://api.github.com/repos/Amadou-dot/juxtopposed-vlc/releases")));
+    }
+    void acceptsOnlyForkReleaseAndDownloadUrls()
+    {
+        const Target target{QStringLiteral("linux"), QStringLiteral("x86_64")};
+        const auto candidate = release(QStringLiteral("4.0.0-beta.6"), QStringLiteral("linux-x86_64.tar.gz"));
+        const auto installed = version("4.0.0-beta.5");
+        QVERIFY(selectRelease({candidate}, installed, target));
+        auto upstreamPage = candidate;
+        upstreamPage[QStringLiteral("html_url")] = candidate.value(QStringLiteral("html_url")).toString()
+            .replace(QStringLiteral("/Amadou-dot/"), QStringLiteral("/dsojevic/"));
+        QVERIFY(!selectRelease({upstreamPage}, installed, target));
+        auto upstreamDownload = candidate;
+        auto asset = candidate.value(QStringLiteral("assets")).toArray().first().toObject();
+        asset[QStringLiteral("browser_download_url")] = asset.value(QStringLiteral("browser_download_url")).toString()
+            .replace(QStringLiteral("/Amadou-dot/"), QStringLiteral("/dsojevic/"));
+        upstreamDownload[QStringLiteral("assets")] = QJsonArray{asset};
+        QVERIFY(!selectRelease({upstreamDownload}, installed, target));
+        upstreamPage[QStringLiteral("assets")] = QJsonArray{asset};
+        QVERIFY(!selectRelease({upstreamPage}, installed, target));
+    }
     void precedence_data()
     {
         QTest::addColumn<QString>("installed");

@@ -2,12 +2,12 @@ dnl Autoconf settings for vlc
 
 AC_COPYRIGHT([Copyright 1999-2026 VLC authors and VideoLAN])
 
-AC_INIT([vlc], [4.0.0-beta.5])
+AC_INIT([vlc], [4.0.0-beta.6])
 VERSION_MAJOR=4
 VERSION_MINOR=0
 VERSION_REVISION=0
 VERSION_EXTRA=0
-VERSION_DEV=beta.5
+VERSION_DEV=beta.6
 UPDATE_GENERATION=0
 
 VERSION_DATE=$(
