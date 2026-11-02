@@ -471,6 +471,10 @@ qt_plugin_sources = files(
     'player/subtitle_timeline_scanner.hpp',
     'util/seek_preview_cache.hpp',
     'util/seek_preview_image_provider.hpp',
+    'util/queue_thumbnail_provider.hpp',
+    'util/queue_thumbnail_provider.cpp',
+    'util/queue_thumbnail_decoder.hpp',
+    'util/queue_thumbnail_decoder.cpp',
     'util/subtitle_source_service.hpp',
     'util/subtitle_source_service.cpp',
     'util/github_release_service.cpp',
@@ -1755,6 +1759,19 @@ if qt6_dep.found()
             'link_with': [libvlccore, libvlc],
             'link_args': qt_link_args,
             'dependencies': [qt6_dep, qt_extra_deps, qtest_qt6_dep],
+        }
+        vlc_tests += {
+            'name': 'test_qt_queue_thumbnail_provider',
+            'sources': files('tests/test_queue_thumbnail_provider.cpp',
+                'util/queue_thumbnail_provider.cpp', 'util/queue_thumbnail_decoder.cpp'),
+            'moc_sources': files('tests/test_queue_thumbnail_provider.cpp'),
+            'suite': ['qt'],
+            'include_directories': qt_include_dir,
+            'link_with': [libvlccore, libvlc],
+            'link_args': qt_link_args,
+            'dependencies': [qt6_dep, qt_extra_deps, qtest_qt6_dep],
+            'module_depends': ['filesystem', 'rawvid', 'rawvideo', 'swscale'],
+            'env': ['VLC_PLUGIN_PATH=' + vlc_build_root / 'modules'],
         }
         vlc_tests += {
             'name': 'test_qt_subtitle_timeline_scanner',

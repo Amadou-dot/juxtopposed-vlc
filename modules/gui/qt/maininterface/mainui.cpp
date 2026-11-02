@@ -56,6 +56,8 @@
 #include "util/effects_image_provider.hpp"
 #include "util/vlcaccess_image_provider.hpp"
 #include "util/seek_preview_image_provider.hpp"
+#include "util/queue_thumbnail_provider.hpp"
+#include "util/queue_thumbnail_decoder.hpp"
 #include "util/csdbuttonmodel.hpp"
 #include "util/vlctick.hpp"
 #include "util/list_selection_model.hpp"
@@ -73,6 +75,7 @@
 #include "util/redesign_folder_model.hpp"
 #include "util/subtitle_source_service.hpp"
 #include <QDir>
+#include <QStandardPaths>
 #include <vlc_configuration.h>
 #include <QQmlContext>
 #include "dialogs/dialogs/dialogmodel.hpp"
@@ -184,6 +187,13 @@ bool MainUI::setup(QQmlEngine* engine)
     engine->rootContext()->setContextProperty(QStringLiteral("redesignAppearance"), m_mainCtx);
     engine->addImageProvider(QStringLiteral("vlcaccess"), new VLCAccessImageProvider());
     engine->addImageProvider(QStringLiteral("seekpreview"), new SeekPreviewImageProvider());
+    QueueThumbnailProvider::Options queuePreviews;
+    const auto cacheDirectory = QStandardPaths::writableLocation(QStandardPaths::CacheLocation);
+    if (!cacheDirectory.isEmpty())
+        queuePreviews.cacheDirectory = QDir(cacheDirectory).filePath(QStringLiteral("queue-thumbnails/v1"));
+    queuePreviews.decode = makeQueueThumbnailDecoder(VLC_OBJECT(m_intf));
+    engine->addImageProvider(QStringLiteral("queuethumbnail"), new QueueThumbnailProvider(std::move(queuePreviews)));
+    engine->rootContext()->setContextProperty(QStringLiteral("queueThumbnailImages"), true);
 
     m_component  = new QQmlComponent(engine, QStringLiteral("qrc:/qt/qml/VLC/MainInterface/MainInterface.qml"), QQmlComponent::PreferSynchronous, engine);
     if (m_component->isLoading())

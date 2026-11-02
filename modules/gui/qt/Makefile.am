@@ -315,6 +315,8 @@ libqt_plugin_la_SOURCES = \
 	player/series_model.cpp player/series_model.hpp \
 	player/episode_metadata.cpp player/episode_metadata.hpp \
 	util/seek_preview_cache.hpp util/seek_preview_image_provider.hpp \
+	util/queue_thumbnail_provider.cpp util/queue_thumbnail_provider.hpp \
+	util/queue_thumbnail_decoder.cpp util/queue_thumbnail_decoder.hpp \
 	util/subtitle_source_service.hpp util/subtitle_source_service.cpp \
 	util/github_release_service.hpp util/github_release_service.cpp \
 	util/release_info.hpp util/release_info.cpp \
@@ -2111,6 +2113,20 @@ test_seek_preview_image_provider_LDADD = $(QT_QTEST_COMMON_ldadd)
 test_seek_preview_image_provider_LDFLAGS = $(QT_QTEST_COMMON_ldflags)
 check_PROGRAMS += test_seek_preview_image_provider
 TESTS += test_seek_preview_image_provider
+
+test_queue_thumbnail_provider_SOURCES = \
+	tests/test_queue_thumbnail_provider.cpp \
+	util/queue_thumbnail_provider.cpp util/queue_thumbnail_provider.hpp \
+	util/queue_thumbnail_decoder.cpp util/queue_thumbnail_decoder.hpp
+nodist_test_queue_thumbnail_provider_SOURCES = tests/test_queue_thumbnail_provider.moc
+BUILT_SOURCES += tests/test_queue_thumbnail_provider.moc
+CLEANFILES += tests/test_queue_thumbnail_provider.moc
+test_queue_thumbnail_provider_CPPFLAGS = $(QT_QTEST_COMMON_cppflags)
+test_queue_thumbnail_provider_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
+test_queue_thumbnail_provider_LDADD = $(QT_QTEST_COMMON_ldadd)
+test_queue_thumbnail_provider_LDFLAGS = $(QT_QTEST_COMMON_ldflags)
+check_PROGRAMS += test_queue_thumbnail_provider
+TESTS += test_queue_thumbnail_provider
 
 test_subtitle_timeline_scanner_SOURCES = \
 	tests/test_subtitle_timeline_scanner.cpp \
