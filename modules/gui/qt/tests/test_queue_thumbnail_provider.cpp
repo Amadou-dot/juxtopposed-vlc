@@ -15,12 +15,35 @@
 #include <QQuickView>
 #include <QQuickItem>
 #include <mutex>
+#include <thread>
+#ifdef __linux__
+# include <dlfcn.h>
+# include <pthread.h>
+# include <cerrno>
+#endif
 #include <vlc/vlc.h>
 #include "../../../../lib/libvlc_internal.h"
 #include "../util/queue_thumbnail_provider.hpp"
 #include "../util/queue_thumbnail_decoder.hpp"
 
 extern "C" const char vlc_module_name[] = "qt_queue_thumbnail_test";
+
+#ifdef __linux__
+// Fault injection at the real thumbnail input's thread-start boundary. Other
+// VLC threads, including the preparser executor, still use the real function.
+static std::atomic_bool failThumbnailInputStart{false};
+static std::atomic_int failedInputStarts{0};
+extern "C" int vlc_clone(vlc_thread_t* thread, void* (*entry)(void*), void* data)
+{
+    static const auto realClone = reinterpret_cast<decltype(&vlc_clone)>(dlsym(RTLD_NEXT, "vlc_clone"));
+    if (failThumbnailInputStart) {
+        char name[16]{};
+        pthread_getname_np(pthread_self(), name, sizeof(name));
+        if (QByteArray(name) == "vlc-run-thumb") { ++failedInputStarts; return EAGAIN; }
+    }
+    return realClone ? realClone(thread, entry, data) : ENOSYS;
+}
+#endif
 
 namespace {
 QImage frame(QColor color = Qt::red)
@@ -484,6 +507,37 @@ private slots:
         QueueThumbnailProvider provider(options);
         Pending corrupt(provider, media(cache.path(), "corrupt.mp4"));
         QVERIFY(corrupt.wait()); QVERIFY(corrupt.image().isNull());
+    }
+
+    void nativeStartupFailureIsBounded_data()
+    {
+        QTest::addColumn<bool>("cancel");
+        QTest::newRow("cancel") << true;
+        QTest::newRow("deadline") << false;
+    }
+    void nativeStartupFailureIsBounded()
+    {
+#ifdef __linux__
+        QFETCH(bool, cancel);
+        QTemporaryDir directory;
+        const auto url = media(directory.path());
+        const char* args[] = {"--ignore-config", "--no-media-library", "--no-plugins-cache", "--quiet"};
+        std::unique_ptr<libvlc_instance_t, decltype(&libvlc_release)> vlc(libvlc_new(4, args), libvlc_release);
+        QVERIFY(vlc);
+        std::atomic_bool cancelled{false};
+        failedInputStarts = 0; failThumbnailInputStart = true;
+        std::thread cancelThread;
+        if (cancel) cancelThread = std::thread([&] { QThread::msleep(100); cancelled = true; });
+        QElapsedTimer timer; timer.start();
+        const auto image = makeQueueThumbnailDecoder(VLC_OBJECT(vlc->p_libvlc_int))(url, cancelled);
+        failThumbnailInputStart = false;
+        if (cancelThread.joinable()) cancelThread.join();
+        QVERIFY(failedInputStarts > 0);
+        QVERIFY(image.isNull());
+        QVERIFY(timer.elapsed() < (cancel ? 2000 : 17000));
+#else
+        QSKIP("Thread-start fault injection uses Linux symbol interposition.");
+#endif
     }
 };
 

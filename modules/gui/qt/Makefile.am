@@ -2122,9 +2122,9 @@ test_queue_thumbnail_provider_SOURCES = \
 nodist_test_queue_thumbnail_provider_SOURCES = tests/test_queue_thumbnail_provider.moc
 BUILT_SOURCES += tests/test_queue_thumbnail_provider.moc
 CLEANFILES += tests/test_queue_thumbnail_provider.moc
-test_queue_thumbnail_provider_CPPFLAGS = $(QT_QTEST_COMMON_cppflags)
+test_queue_thumbnail_provider_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -DTOP_SRCDIR=\"$(abs_top_srcdir)\"
 test_queue_thumbnail_provider_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
-test_queue_thumbnail_provider_LDADD = $(QT_QTEST_COMMON_ldadd)
+test_queue_thumbnail_provider_LDADD = $(QT_QTEST_COMMON_ldadd) $(LIBDL)
 test_queue_thumbnail_provider_LDFLAGS = $(QT_QTEST_COMMON_ldflags)
 check_PROGRAMS += test_queue_thumbnail_provider
 TESTS += test_queue_thumbnail_provider

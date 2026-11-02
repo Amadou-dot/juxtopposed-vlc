@@ -17,6 +17,7 @@ QImage decodeAt(vlc_object_t* context, const QUrl& url, const std::atomic_bool& 
                 double position, vlc_tick_t timeout)
 {
     if (cancelled || !url.isLocalFile()) return {};
+    const auto deadline = vlc_tick_now() + timeout;
     vlc_preparser_cfg config{};
     config.types = VLC_PREPARSER_TYPE_THUMBNAIL;
     config.max_thumbnailer_threads = 1;
@@ -81,19 +82,21 @@ QImage decodeAt(vlc_object_t* context, const QUrl& url, const std::atomic_bool& 
     if (!request || vlc_preparser_Submit(preparser.get(), request.get()) != VLC_SUCCESS) return {};
     msg_Dbg(context, "Queue thumbnail decode started at %.0f%%", position * 100);
     std::unique_lock lock(result.mutex);
-    while (!result.ended && !cancelled)
-        result.changed.wait_for(lock, std::chrono::milliseconds(25));
-    if (!result.ended) {
-        // Cancel may invoke the callback synchronously: never hold its lock.
-        lock.unlock();
-        vlc_preparser_Cancel(preparser.get(), request.get());
-        lock.lock();
-        result.changed.wait(lock, [&] { return result.ended; });
+    while (!result.ended && !cancelled) {
+        const auto remaining = deadline - vlc_tick_now();
+        if (remaining <= 0) break;
+        result.changed.wait_for(lock, std::chrono::microseconds(std::min(remaining, VLC_TICK_FROM_MS(25))));
     }
-    const auto image = cancelled ? QImage{} : result.image;
+    const bool completed = result.ended;
     lock.unlock();
-    // Join callback execution before destroying its stack-owned context.
+    // Input startup failures can exit without a callback. Do not wait for one
+    // after cancellation or the deadline; deleting the preparser joins its
+    // executor and any callbacks before this stack-owned context goes away.
+    // Both cancellation and deletion can call back synchronously.
+    if (!completed)
+        vlc_preparser_Cancel(preparser.get(), request.get());
     preparser.reset();
+    const auto image = completed && !cancelled ? result.image : QImage{};
     msg_Dbg(context, "Queue thumbnail decode %s", cancelled ? "cancelled" : image.isNull() ? "unavailable" : "finished");
     return image;
 }
