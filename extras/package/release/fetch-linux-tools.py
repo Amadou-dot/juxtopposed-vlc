@@ -9,7 +9,8 @@ import urllib.request
 # Digests published with these GitHub release assets. continuous URLs may move;
 # an upstream replacement must be reviewed and its pin updated before use.
 TOOLS = {
-    'linuxdeploy': '8aea8da0f7f7039d2a2cecb14657d752a222a5e1d3825caeef186c82f751cdd1',
+    # Continuous build published 2026-11-01, source commit 07333c6.
+    'linuxdeploy': 'df908b19f1ed1cdafa79508d415aa12d6c56ce4d56d4149aa8c09286718706e5',
     'linuxdeploy-plugin-qt': 'cfc1055b2b9dbc08412b579f20990b7b41a17b61beaa5847dc9477c96c9e9617',
 }
 
